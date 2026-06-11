@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Evolving Pipeline</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     :root {
       --ink: #13202b;
@@ -458,6 +459,7 @@
         <button data-tab="dashboard" class="active">Dashboard</button>
         <button data-tab="quotations">Quotations</button>
         <button data-tab="spreadsheet">Spreadsheet</button>
+        <button data-tab="supabase" id="supabaseNav">Supabase</button>
         <button data-tab="users" id="usersNav">Users</button>
         <button data-tab="logs" id="logsNav">Access Logs</button>
       </nav>
@@ -589,6 +591,37 @@
         </div>
       </section>
 
+      <section id="supabase" class="section">
+        <div class="grid">
+          <form id="supabaseForm" class="panel">
+            <div class="section-title"><h2>Online storage</h2></div>
+            <div class="field">
+              <label for="supabaseUrl">Supabase project URL</label>
+              <input id="supabaseUrl" placeholder="https://your-project.supabase.co">
+            </div>
+            <div class="field">
+              <label for="supabaseKey">Supabase anon key</label>
+              <input id="supabaseKey" placeholder="Paste anon public key">
+            </div>
+            <div class="field">
+              <label for="supabaseBucket">PDF storage bucket</label>
+              <input id="supabaseBucket" value="quotation-files">
+            </div>
+            <div class="actions">
+              <button class="btn btn-primary" type="submit">Save connection</button>
+              <button class="btn btn-dark" id="syncSupabase" type="button">Sync now</button>
+              <button class="btn btn-danger" id="clearSupabase" type="button">Disconnect</button>
+            </div>
+            <p class="message" id="supabaseMessage"></p>
+          </form>
+          <div class="panel">
+            <div class="section-title"><h2>Status</h2></div>
+            <p><strong id="supabaseStatus">Local browser storage</strong></p>
+            <p class="muted small">Use the SQL setup file supplied with this app to create the online tables and storage bucket first. After connection, uploaded PDFs are stored in Supabase Storage and quotation rows use those file links.</p>
+          </div>
+        </div>
+      </section>
+
       <section id="users" class="section">
         <div class="grid">
           <form id="userForm" class="panel">
@@ -654,6 +687,7 @@
 
   <script>
     const STORE = "evolvingPipelineState";
+    const SUPABASE_CONFIG = "evolvingPipelineSupabase";
     const emailDomain = "@evolvingtechkenya.com";
     const starter = {
       users: [
@@ -665,6 +699,9 @@
 
     let state = loadState();
     let currentUser = null;
+    let supabaseClient = null;
+    let supabaseConfig = loadSupabaseConfig();
+    let onlineReady = false;
 
     if (window.pdfjsLib) {
       pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -679,6 +716,135 @@
 
     function saveState() {
       localStorage.setItem(STORE, JSON.stringify(state));
+      if (onlineReady) cloudSaveState();
+    }
+
+    function loadSupabaseConfig() {
+      try {
+        return JSON.parse(localStorage.getItem(SUPABASE_CONFIG)) || { url: "", key: "", bucket: "quotation-files" };
+      } catch {
+        return { url: "", key: "", bucket: "quotation-files" };
+      }
+    }
+
+    function saveSupabaseConfig(config) {
+      supabaseConfig = config;
+      localStorage.setItem(SUPABASE_CONFIG, JSON.stringify(config));
+    }
+
+    function hasSupabaseConfig() {
+      return Boolean(supabaseConfig.url && supabaseConfig.key && window.supabase);
+    }
+
+    async function connectSupabase() {
+      if (!hasSupabaseConfig()) {
+        onlineReady = false;
+        updateSupabaseStatus();
+        return false;
+      }
+      supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.key);
+      onlineReady = true;
+      updateSupabaseStatus();
+      return true;
+    }
+
+    function updateSupabaseStatus() {
+      const status = document.getElementById("supabaseStatus");
+      if (!status) return;
+      status.textContent = onlineReady ? `Connected to Supabase (${supabaseConfig.bucket || "quotation-files"})` : "Local browser storage";
+      document.getElementById("supabaseUrl").value = supabaseConfig.url || "";
+      document.getElementById("supabaseKey").value = supabaseConfig.key || "";
+      document.getElementById("supabaseBucket").value = supabaseConfig.bucket || "quotation-files";
+    }
+
+    function mapCloudUser(row) {
+      return {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        password: row.password,
+        role: row.role,
+        active: row.active,
+        lastAccess: row.last_access || ""
+      };
+    }
+
+    function mapCloudQuote(row) {
+      return {
+        id: row.id,
+        number: row.number,
+        class: row.class,
+        title: row.title,
+        customer: row.customer,
+        amount: row.amount,
+        assignedTo: row.assigned_to,
+        status: row.status,
+        fileName: row.file_name,
+        fileUrl: row.file_url,
+        importedAt: row.imported_at || ""
+      };
+    }
+
+    function mapCloudLog(row) {
+      return {
+        id: row.id,
+        user: row.user_name,
+        email: row.email,
+        action: row.action,
+        stamp: row.stamp || ""
+      };
+    }
+
+    async function loadCloudState() {
+      if (!onlineReady) return;
+      const [usersRes, quotesRes, logsRes] = await Promise.all([
+        supabaseClient.from("ep_users").select("*").order("name"),
+        supabaseClient.from("ep_quotations").select("*").order("created_at", { ascending: false }),
+        supabaseClient.from("ep_access_logs").select("*").order("created_at", { ascending: false }).limit(300)
+      ]);
+      if (usersRes.error || quotesRes.error || logsRes.error) {
+        throw new Error(usersRes.error?.message || quotesRes.error?.message || logsRes.error?.message);
+      }
+      state.users = usersRes.data.map(mapCloudUser);
+      state.quotes = quotesRes.data.map(mapCloudQuote);
+      state.logs = logsRes.data.map(mapCloudLog);
+      localStorage.setItem(STORE, JSON.stringify(state));
+    }
+
+    async function cloudSaveState() {
+      if (!onlineReady) return;
+      const users = state.users.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        password: u.password,
+        role: u.role,
+        active: u.active,
+        last_access: u.lastAccess || null
+      }));
+      const quotes = state.quotes.map(q => ({
+        id: q.id,
+        number: q.number,
+        class: q.class || quotationClass(q.number),
+        title: q.title,
+        customer: q.customer,
+        amount: q.amount,
+        assigned_to: q.assignedTo,
+        status: q.status,
+        file_name: q.fileName || "",
+        file_url: q.fileUrl || q.fileData || "",
+        imported_at: q.importedAt || null
+      }));
+      const logs = state.logs.slice(0, 300).map(l => ({
+        id: l.id,
+        user_name: l.user,
+        email: l.email,
+        action: l.action,
+        stamp: l.stamp || null
+      }));
+      await supabaseClient.from("ep_users").upsert(users);
+      await supabaseClient.from("ep_quotations").upsert(quotes);
+      if (logs.length) await supabaseClient.from("ep_access_logs").upsert(logs);
     }
 
     function logAccess(user, action) {
@@ -739,6 +905,17 @@
 
     function isAdmin() {
       return currentUser && currentUser.role === "admin";
+    }
+
+    async function prepareOnlineState() {
+      await connectSupabase();
+      if (!onlineReady) return;
+      await loadCloudState();
+      if (!state.users.length) {
+        state.users = structuredClone(starter.users);
+        await cloudSaveState();
+        await loadCloudState();
+      }
     }
 
     function setMessage(id, text, ok = false) {
@@ -884,6 +1061,20 @@
       });
     }
 
+    async function uploadPdfToSupabase(file, number) {
+      if (!file || !onlineReady) return "";
+      const safeNumber = String(number || crypto.randomUUID()).replace(/[^a-z0-9-_]/gi, "_");
+      const path = `${safeNumber}/${Date.now()}-${file.name.replace(/[^a-z0-9._-]/gi, "_")}`;
+      const upload = await supabaseClient.storage
+        .from(supabaseConfig.bucket || "quotation-files")
+        .upload(path, file, { upsert: true, contentType: "application/pdf" });
+      if (upload.error) throw new Error(upload.error.message);
+      const publicUrl = supabaseClient.storage
+        .from(supabaseConfig.bucket || "quotation-files")
+        .getPublicUrl(path);
+      return publicUrl.data.publicUrl;
+    }
+
     async function buildQuoteRecord(data, file, options = {}) {
       const selectedClass = data.class || document.getElementById("quotationClass").value || "ET";
       const number = normalizeQuotationNumber(data.number) || nextQuotationNumber(selectedClass);
@@ -897,7 +1088,8 @@
         assignedTo: options.assignedTo || currentAssignmentName(),
         status: options.status || document.getElementById("quoteStatus").value,
         fileName: file ? file.name : "",
-        fileData: options.fileData || await fileToDataUrl(file),
+        fileUrl: options.fileUrl || await uploadPdfToSupabase(file, number),
+        fileData: onlineReady ? "" : options.fileData || await fileToDataUrl(file),
         importedAt: new Date().toLocaleString()
       };
     }
@@ -974,8 +1166,9 @@
       if (!quote) return;
       document.getElementById("modalTitle").textContent = quote.number || "Saved quotation";
       document.getElementById("modalSubtitle").textContent = `${quote.class || quotationClass(quote.number)} quotation saved ${quote.importedAt || ""}`;
-      const pdfView = quote.fileData
-        ? `<iframe class="pdf-frame" title="Saved PDF quotation" src="${quote.fileData}"></iframe>`
+      const pdfSource = quote.fileUrl || quote.fileData || "";
+      const pdfView = pdfSource
+        ? `<iframe class="pdf-frame" title="Saved PDF quotation" src="${escapeHtml(pdfSource)}"></iframe>`
         : `<div class="detail-box"><span>Original PDF</span><strong>Not available for this older saved row</strong><p class="muted small">Upload and save the PDF again to store the original quotation for viewing.</p></div>`;
       document.getElementById("quoteDetail").innerHTML = `
         <div class="detail-grid">
@@ -985,6 +1178,7 @@
           <div class="detail-box"><span>Status</span><strong>${escapeHtml(quote.status)}</strong></div>
           <div class="detail-box"><span>Assigned to</span><strong>${escapeHtml(quote.assignedTo)}</strong></div>
           <div class="detail-box"><span>File</span><strong>${escapeHtml(quote.fileName || "No file name")}</strong></div>
+          <div class="detail-box"><span>Storage link</span>${pdfSource ? `<a href="${escapeHtml(pdfSource)}" target="_blank" rel="noopener">Open PDF in Supabase</a>` : "No online file link"}</div>
           <div class="detail-box"><span>Customer</span>${escapeHtml(quote.customer).replace(/\n/g, "<br>")}</div>
           <div class="detail-box"><span>RE / Title</span>${escapeHtml(quote.title)}</div>
         </div>
@@ -1014,7 +1208,9 @@
       document.getElementById("currentRole").textContent = currentUser ? currentUser.role.toUpperCase() : "";
       document.getElementById("usersNav").classList.toggle("hidden", !isAdmin());
       document.getElementById("logsNav").classList.toggle("hidden", !isAdmin());
+      document.getElementById("supabaseNav").classList.toggle("hidden", !isAdmin());
       document.getElementById("resetDemo").classList.toggle("hidden", !isAdmin());
+      updateSupabaseStatus();
 
       const activeUsers = state.users.filter(u => u.active);
       document.getElementById("assignedTo").innerHTML = activeUsers.map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.name)} - ${escapeHtml(u.email)}</option>`).join("");
@@ -1071,17 +1267,24 @@
       `).join("") || `<tr><td colspan="4" class="muted">No access logs yet.</td></tr>`;
     }
 
-    document.getElementById("loginForm").addEventListener("submit", event => {
+    document.getElementById("loginForm").addEventListener("submit", async event => {
       event.preventDefault();
       const email = document.getElementById("loginEmail").value.trim().toLowerCase();
       const password = document.getElementById("loginPassword").value;
       if (!email.endsWith(emailDomain)) return setMessage("loginMessage", "Use an @evolvingtechkenya.com email address.");
+      setMessage("loginMessage", "Checking access...", true);
+      try {
+        await prepareOnlineState();
+      } catch (error) {
+        return setMessage("loginMessage", `Supabase connection failed: ${error.message}`);
+      }
       const user = state.users.find(u => u.active && u.email.toLowerCase() === email && u.password === password);
       if (!user) return setMessage("loginMessage", "Email or password is incorrect.");
       currentUser = user;
       logAccess(user, "Signed in");
       document.getElementById("loginScreen").classList.add("hidden");
       document.getElementById("appScreen").classList.remove("hidden");
+      updateSupabaseStatus();
       render();
     });
 
@@ -1165,6 +1368,50 @@
       if (event.target.id === "quoteModal") closeSavedQuotation();
     });
 
+    document.getElementById("supabaseForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!isAdmin()) return;
+      saveSupabaseConfig({
+        url: document.getElementById("supabaseUrl").value.trim(),
+        key: document.getElementById("supabaseKey").value.trim(),
+        bucket: document.getElementById("supabaseBucket").value.trim() || "quotation-files"
+      });
+      try {
+        await connectSupabase();
+        await cloudSaveState();
+        await loadCloudState();
+        setMessage("supabaseMessage", "Connected and synced online.", true);
+        render();
+      } catch (error) {
+        onlineReady = false;
+        updateSupabaseStatus();
+        setMessage("supabaseMessage", error.message);
+      }
+    });
+
+    document.getElementById("syncSupabase").addEventListener("click", async () => {
+      if (!isAdmin()) return;
+      try {
+        await connectSupabase();
+        await cloudSaveState();
+        await loadCloudState();
+        setMessage("supabaseMessage", "Synced with Supabase.", true);
+        render();
+      } catch (error) {
+        setMessage("supabaseMessage", error.message);
+      }
+    });
+
+    document.getElementById("clearSupabase").addEventListener("click", () => {
+      if (!isAdmin()) return;
+      localStorage.removeItem(SUPABASE_CONFIG);
+      supabaseConfig = loadSupabaseConfig();
+      supabaseClient = null;
+      onlineReady = false;
+      updateSupabaseStatus();
+      setMessage("supabaseMessage", "Disconnected. The app is using local browser storage.", true);
+    });
+
     document.getElementById("userForm").addEventListener("submit", event => {
       event.preventDefault();
       if (!isAdmin()) return;
@@ -1182,7 +1429,7 @@
       render();
     });
 
-    document.body.addEventListener("click", event => {
+    document.body.addEventListener("click", async event => {
       const deleteUser = event.target.dataset.deleteUser;
       const deleteQuote = event.target.dataset.deleteQuote;
       const viewQuote = event.target.dataset.viewQuote;
@@ -1202,6 +1449,7 @@
         const quote = state.quotes.find(q => q.id === deleteQuote);
         state.quotes = state.quotes.filter(q => q.id !== deleteQuote);
         logAccess(currentUser, `Deleted quotation ${quote ? quote.number : ""}`);
+        if (onlineReady) await supabaseClient.from("ep_quotations").delete().eq("id", deleteQuote);
         saveState();
         render();
       }
