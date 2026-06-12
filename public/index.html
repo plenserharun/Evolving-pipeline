@@ -6,6 +6,7 @@
   <title>Evolving Pipeline</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./config.js"></script>
   <style>
     :root {
       --ink: #13202b;
@@ -720,10 +721,20 @@
     }
 
     function loadSupabaseConfig() {
+      const deployedConfig = window.EVOLVING_PIPELINE_SUPABASE || {};
       try {
-        return JSON.parse(localStorage.getItem(SUPABASE_CONFIG)) || { url: "", key: "", bucket: "quotation-files" };
+        const saved = JSON.parse(localStorage.getItem(SUPABASE_CONFIG)) || {};
+        return {
+          url: saved.url || deployedConfig.url || "",
+          key: saved.key || deployedConfig.anonKey || deployedConfig.key || "",
+          bucket: saved.bucket || deployedConfig.bucket || "quotation-files"
+        };
       } catch {
-        return { url: "", key: "", bucket: "quotation-files" };
+        return {
+          url: deployedConfig.url || "",
+          key: deployedConfig.anonKey || deployedConfig.key || "",
+          bucket: deployedConfig.bucket || "quotation-files"
+        };
       }
     }
 
@@ -847,11 +858,52 @@
       if (logs.length) await supabaseClient.from("ep_access_logs").upsert(logs);
     }
 
+    async function cloudSaveLog(log, user) {
+      if (!onlineReady) return;
+      await Promise.all([
+        supabaseClient.from("ep_access_logs").upsert({
+          id: log.id,
+          user_name: log.user,
+          email: log.email,
+          action: log.action,
+          stamp: log.stamp
+        }),
+        supabaseClient.from("ep_users").upsert({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          password: user.password,
+          role: user.role,
+          active: user.active,
+          last_access: user.lastAccess || log.stamp
+        })
+      ]);
+    }
+
+    async function cloudSaveQuote(quote) {
+      if (!onlineReady) return;
+      await supabaseClient.from("ep_quotations").upsert({
+        id: quote.id,
+        number: quote.number,
+        class: quote.class || quotationClass(quote.number),
+        title: quote.title,
+        customer: quote.customer,
+        amount: quote.amount,
+        assigned_to: quote.assignedTo,
+        status: quote.status,
+        file_name: quote.fileName || "",
+        file_url: quote.fileUrl || quote.fileData || "",
+        imported_at: quote.importedAt || null
+      });
+    }
+
     function logAccess(user, action) {
       const stamp = new Date().toLocaleString();
-      state.logs.unshift({ id: crypto.randomUUID(), user: user.name, email: user.email, action, stamp });
+      const log = { id: crypto.randomUUID(), user: user.name, email: user.email, action, stamp };
+      state.logs.unshift(log);
       user.lastAccess = stamp;
       saveState();
+      cloudSaveLog(log, user).catch(error => console.warn("Supabase log save failed", error));
     }
 
     function quotationClass(number, fallback = "ET") {
@@ -1120,6 +1172,7 @@
             continue;
           }
           state.quotes.unshift(record);
+          await cloudSaveQuote(record);
           saved++;
         } catch (error) {
           failed.push(file.name);
@@ -1355,6 +1408,7 @@
         amount
       }, file);
       state.quotes.unshift(record);
+      await cloudSaveQuote(record);
       logAccess(currentUser, `Saved quotation ${number}`);
       ["quoteFile", "quotationNumber", "reTitle", "customerDetails", "amount"].forEach(id => document.getElementById(id).value = "");
       setMessage("quoteMessage", "Quotation saved.", true);

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Static Evolving Pipeline quotation app with Supabase-backed storage.",
   "scripts": {
-    "build": "node -e \"const fs=require('fs');const path=require('path');fs.mkdirSync('public',{recursive:true});fs.copyFileSync('index.html',path.join('public','index.html'));if(fs.existsSync('supabase-setup.sql'))fs.copyFileSync('supabase-setup.sql',path.join('public','supabase-setup.sql'));console.log('Built static app into public/')\"",
+    "build": "node -e \"const fs=require('fs');const path=require('path');fs.mkdirSync('public',{recursive:true});for(const f of ['index.html','config.js','supabase-setup.sql'])if(fs.existsSync(f))fs.copyFileSync(f,path.join('public',f));console.log('Built static app into public/')\"",
     "deploy:cloudflare": "wrangler deploy"
   },
   "devDependencies": {
