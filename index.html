@@ -880,6 +880,20 @@
       ]);
     }
 
+    async function cloudSaveUser(user) {
+      if (!onlineReady) return;
+      const result = await supabaseClient.from("ep_users").upsert({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        password: user.password,
+        role: user.role,
+        active: user.active,
+        last_access: user.lastAccess || null
+      });
+      if (result.error) throw new Error(result.error.message);
+    }
+
     async function cloudSaveQuote(quote) {
       if (!onlineReady) return;
       await supabaseClient.from("ep_quotations").upsert({
@@ -1466,7 +1480,7 @@
       setMessage("supabaseMessage", "Disconnected. The app is using local browser storage.", true);
     });
 
-    document.getElementById("userForm").addEventListener("submit", event => {
+    document.getElementById("userForm").addEventListener("submit", async event => {
       event.preventDefault();
       if (!isAdmin()) return;
       const name = document.getElementById("newName").value.trim();
@@ -1474,13 +1488,27 @@
       const password = document.getElementById("newPassword").value;
       const role = document.getElementById("newRole").value;
       if (!email.endsWith(emailDomain)) return setMessage("userMessage", "User email must end with @evolvingtechkenya.com.");
-      if (state.users.some(u => u.active && u.email.toLowerCase() === email)) return setMessage("userMessage", "That user already exists.");
-      state.users.push({ id: crypto.randomUUID(), name, email, password, role, active: true, lastAccess: "" });
-      logAccess(currentUser, `Created user ${email}`);
-      event.target.reset();
-      setMessage("userMessage", "User created.", true);
-      saveState();
-      render();
+      const existingUser = state.users.find(u => u.email.toLowerCase() === email);
+      if (existingUser && existingUser.active) return setMessage("userMessage", "That user already exists.");
+
+      const user = existingUser || { id: crypto.randomUUID(), name, email, password, role, active: true, lastAccess: "" };
+      user.name = name;
+      user.email = email;
+      user.password = password;
+      user.role = role;
+      user.active = true;
+      if (!existingUser) state.users.push(user);
+
+      try {
+        await cloudSaveUser(user);
+        logAccess(currentUser, existingUser ? `Reactivated user ${email}` : `Created user ${email}`);
+        event.target.reset();
+        setMessage("userMessage", existingUser ? "User reactivated." : "User created.", true);
+        saveState();
+        render();
+      } catch (error) {
+        setMessage("userMessage", `Could not save user online: ${error.message}`);
+      }
     });
 
     document.body.addEventListener("click", async event => {
@@ -1495,6 +1523,7 @@
         const user = state.users.find(u => u.id === deleteUser);
         if (user) {
           user.active = false;
+          if (onlineReady) await cloudSaveUser(user);
           logAccess(currentUser, `Deleted user ${user.email}`);
           render();
         }
