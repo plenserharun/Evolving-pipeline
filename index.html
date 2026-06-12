@@ -1,0 +1,1469 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Evolving Pipeline</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --ink: #13202b;
+      --muted: #637080;
+      --line: #d8e0e8;
+      --panel: #ffffff;
+      --mist: #f3f7fb;
+      --navy: #0d2b45;
+      --teal: #0f766e;
+      --green: #16a34a;
+      --amber: #c47b02;
+      --red: #c2410c;
+      --shadow: 0 18px 50px rgba(13, 43, 69, .14);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background:
+        linear-gradient(135deg, rgba(15, 118, 110, .12), transparent 32%),
+        linear-gradient(315deg, rgba(196, 123, 2, .13), transparent 30%),
+        #eef4f8;
+      min-height: 100vh;
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    .hidden { display: none !important; }
+
+    .login-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(320px, 440px) 1fr;
+    }
+
+    .brand-side {
+      padding: 42px;
+      color: #fff;
+      background:
+        linear-gradient(rgba(13, 43, 69, .78), rgba(13, 43, 69, .86)),
+        url("https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=80") center/cover;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .mark {
+      display: inline-grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border-radius: 8px;
+      background: #14b8a6;
+      color: #fff;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .brand-side h1 {
+      font-size: clamp(2.4rem, 6vw, 5rem);
+      line-height: .95;
+      margin: 28px 0 18px;
+      letter-spacing: 0;
+      max-width: 760px;
+    }
+
+    .brand-side p {
+      color: rgba(255,255,255,.84);
+      font-size: 1.04rem;
+      max-width: 560px;
+      line-height: 1.6;
+    }
+
+    .login-card {
+      margin: auto;
+      width: min(88%, 440px);
+      background: rgba(255,255,255,.9);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255,255,255,.8);
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: var(--shadow);
+    }
+
+    .login-card h2, .section-title h2 {
+      margin: 0;
+      font-size: 1.45rem;
+      letter-spacing: 0;
+    }
+
+    .login-card .hint {
+      color: var(--muted);
+      line-height: 1.5;
+      margin: 8px 0 22px;
+    }
+
+    label {
+      display: block;
+      color: #2f3c49;
+      font-size: .86rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      padding: 11px 12px;
+      outline: none;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, .14);
+    }
+
+    .field { margin-bottom: 16px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    .btn {
+      border: 0;
+      border-radius: 6px;
+      padding: 11px 14px;
+      cursor: pointer;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+    }
+
+    .btn-primary { background: var(--teal); color: #fff; }
+    .btn-dark { background: var(--navy); color: #fff; }
+    .btn-soft { background: #e6f3f1; color: #075f59; }
+    .btn-danger { background: #fff1eb; color: var(--red); }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+    }
+
+    .sidebar {
+      background: #0d2b45;
+      color: #fff;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .side-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.1rem;
+      font-weight: 900;
+    }
+
+    .nav {
+      display: grid;
+      gap: 8px;
+    }
+
+    .nav button {
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: rgba(255,255,255,.72);
+      padding: 11px 12px;
+      text-align: left;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    .nav button.active, .nav button:hover {
+      color: #fff;
+      background: rgba(255,255,255,.12);
+    }
+
+    .user-chip {
+      margin-top: auto;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,.18);
+      color: rgba(255,255,255,.75);
+      font-size: .9rem;
+      line-height: 1.5;
+    }
+
+    .main {
+      padding: 26px;
+      overflow: auto;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .topbar h1 {
+      margin: 0;
+      font-size: 1.75rem;
+      letter-spacing: 0;
+    }
+
+    .topbar p {
+      margin: 5px 0 0;
+      color: var(--muted);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(150px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .stat, .panel, .table-wrap {
+      background: rgba(255,255,255,.92);
+      border: 1px solid rgba(216,224,232,.9);
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(13, 43, 69, .08);
+    }
+
+    .stat { padding: 18px; }
+    .stat span { color: var(--muted); font-size: .84rem; font-weight: 800; }
+    .stat strong { display: block; font-size: 1.8rem; margin-top: 6px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 390px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .panel { padding: 18px; }
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 16px;
+    }
+
+    .drop {
+      border: 1.5px dashed #99b9c6;
+      border-radius: 8px;
+      padding: 22px;
+      background: #f7fbfd;
+      text-align: center;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    .drop strong {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 6px;
+    }
+
+    .status {
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: .78rem;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+    .status.open { background: #e6f3f1; color: #075f59; }
+    .status.review { background: #fff4db; color: #8a5200; }
+    .status.won { background: #eaf7ee; color: #126c31; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      font-size: .92rem;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: .78rem;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      background: #f7fafc;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+    .table-wrap { overflow: hidden; }
+    .sheet-wrap { overflow: auto; max-height: 62vh; }
+    .sheet-table { min-width: 1180px; }
+    .sheet-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .sheet-table td, .sheet-table th {
+      border-right: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .sheet-table td:nth-child(6), .sheet-table td:nth-child(7) {
+      white-space: normal;
+      min-width: 220px;
+    }
+    .sheet-toolbar {
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 24, 38, .62);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      z-index: 20;
+    }
+    .modal-card {
+      width: min(940px, 96vw);
+      max-height: 92vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    .modal-head {
+      position: sticky;
+      top: 0;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+    .modal-body { padding: 18px; }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .detail-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #f8fbfd;
+    }
+    .detail-box span {
+      display: block;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .pdf-frame {
+      width: 100%;
+      min-height: 560px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f7fafc;
+    }
+    @media (max-width: 640px) {
+      .detail-grid { grid-template-columns: 1fr; }
+      .pdf-frame { min-height: 420px; }
+    }
+    .muted { color: var(--muted); }
+    .small { font-size: .82rem; }
+    .message { margin-top: 12px; color: var(--red); min-height: 20px; }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .section { display: none; }
+    .section.active { display: block; }
+
+    @media (max-width: 980px) {
+      .login-shell, .app, .grid { grid-template-columns: 1fr; }
+      .brand-side { min-height: 320px; }
+      .sidebar { position: static; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 640px) {
+      .main, .sidebar, .brand-side { padding: 18px; }
+      .row, .stats { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      th, td { padding: 10px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <section id="loginScreen" class="login-shell">
+    <div class="brand-side">
+      <div>
+        <div class="mark">EP</div>
+        <h1>Evolving Pipeline</h1>
+        <p>Upload quotations, detect key details from PDF files, assign work to your team, and keep a clear access record for every user.</p>
+      </div>
+      <p class="small">Evolving Tech Kenya quotation control desk</p>
+    </div>
+    <form id="loginForm" class="login-card">
+      <h2>Sign in</h2>
+      <p class="hint">Use your @evolvingtechkenya.com email address to access the pipeline.</p>
+      <div class="field">
+        <label for="loginEmail">Email</label>
+        <input id="loginEmail" type="email" autocomplete="username" placeholder="admin@evolvingtechkenya.com" required>
+      </div>
+      <div class="field">
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" type="password" autocomplete="current-password" placeholder="Enter password" required>
+      </div>
+      <button class="btn btn-primary" type="submit" style="width:100%">Sign in</button>
+      <p class="message" id="loginMessage"></p>
+      <p class="muted small">Starter admin: admin@evolvingtechkenya.com / Admin@123</p>
+    </form>
+  </section>
+
+  <section id="appScreen" class="app hidden">
+    <aside class="sidebar">
+      <div class="side-brand"><span class="mark">EP</span><span>Evolving<br>Pipeline</span></div>
+      <nav class="nav">
+        <button data-tab="dashboard" class="active">Dashboard</button>
+        <button data-tab="quotations">Quotations</button>
+        <button data-tab="spreadsheet">Spreadsheet</button>
+        <button data-tab="supabase" id="supabaseNav">Supabase</button>
+        <button data-tab="users" id="usersNav">Users</button>
+        <button data-tab="logs" id="logsNav">Access Logs</button>
+      </nav>
+      <div class="user-chip">
+        <strong id="currentName">User</strong><br>
+        <span id="currentRole">Role</span><br><br>
+        <button class="btn btn-soft" id="logoutButton" type="button" style="width:100%">Log out</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <h1 id="pageTitle">Dashboard</h1>
+          <p id="pageSubtitle">Live quotation tracking and allocation.</p>
+        </div>
+        <button class="btn btn-dark" id="resetDemo" type="button">Reset demo data</button>
+      </div>
+
+      <section id="dashboard" class="section active">
+        <div class="stats">
+          <div class="stat"><span>Next ET no.</span><strong id="nextQuoteET">ET/1/2026</strong></div>
+          <div class="stat"><span>Next ETS no.</span><strong id="nextQuoteETS">ETS/1/2026</strong></div>
+          <div class="stat"><span>Next ETC no.</span><strong id="nextQuoteETC">ETC/1/2026</strong></div>
+          <div class="stat"><span>Total quotations</span><strong id="totalQuotes">0</strong></div>
+          <div class="stat"><span>Total value</span><strong id="totalValue">0</strong></div>
+          <div class="stat"><span>Active users</span><strong id="activeUsers">0</strong></div>
+        </div>
+        <div class="grid">
+          <div class="panel">
+            <div class="section-title">
+              <h2>Upload quotation</h2>
+            </div>
+            <div class="drop">
+              <strong>PDF quotation import</strong>
+              The app scans for quotation number, RE/title, customer details, and amount.
+            </div>
+            <div class="field">
+              <label for="quoteFile">Quotation PDF</label>
+              <input id="quoteFile" type="file" accept="application/pdf" multiple>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="quotationClass">Quotation class</label>
+                <select id="quotationClass">
+                  <option value="ET">ET</option>
+                  <option value="ETS">ETS</option>
+                  <option value="ETC">ETC</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="quotationNumber">Quotation number</label>
+                <input id="quotationNumber" placeholder="Auto detected">
+              </div>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="amount">Amount</label>
+                <input id="amount" placeholder="Auto detected">
+              </div>
+              <div class="field">
+                <label for="nextClassNumber">Next available</label>
+                <input id="nextClassNumber" readonly>
+              </div>
+            </div>
+            <div class="field">
+              <label for="reTitle">RE / Title</label>
+              <input id="reTitle" placeholder="Auto detected from RE:">
+            </div>
+            <div class="field">
+              <label for="customerDetails">Customer details</label>
+              <textarea id="customerDetails" rows="4" placeholder="Auto detected customer/client details"></textarea>
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="assignedTo">Assign to</label>
+                <select id="assignedTo"></select>
+              </div>
+              <div class="field">
+                <label for="quoteStatus">Status</label>
+                <select id="quoteStatus">
+                  <option>Open</option>
+                  <option>Review</option>
+                  <option>Won</option>
+                </select>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn btn-primary" id="saveQuote" type="button">Save quotation</button>
+              <button class="btn btn-dark" id="autoSavePdfs" type="button">Auto save selected PDFs</button>
+            </div>
+            <p class="message" id="quoteMessage"></p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>No.</th><th>Class</th><th>RE / Title</th><th>Customer</th><th>Amount</th><th>Assigned</th><th>Status</th></tr></thead>
+              <tbody id="recentQuotes"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="quotations" class="section">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Quotation</th><th>Class</th><th>RE / Title</th><th>Customer</th><th>Amount</th><th>Assigned</th><th>Imported</th><th>Action</th></tr></thead>
+            <tbody id="allQuotes"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="spreadsheet" class="section">
+        <div class="sheet-toolbar">
+          <div>
+            <h2 style="margin:0;font-size:1.15rem">Quotation spreadsheet</h2>
+            <p class="muted small" style="margin:4px 0 0">Saved quotations captured from uploaded PDFs.</p>
+          </div>
+          <button class="btn btn-dark" id="exportCsv" type="button">Export CSV</button>
+        </div>
+        <div class="table-wrap sheet-wrap">
+          <table class="sheet-table">
+            <thead>
+              <tr>
+                <th>#</th><th>Class</th><th>Quotation No.</th><th>Imported</th><th>File</th><th>Customer</th><th>RE / Title</th><th>Amount</th><th>Assigned</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="spreadsheetRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="supabase" class="section">
+        <div class="grid">
+          <form id="supabaseForm" class="panel">
+            <div class="section-title"><h2>Online storage</h2></div>
+            <div class="field">
+              <label for="supabaseUrl">Supabase project URL</label>
+              <input id="supabaseUrl" placeholder="https://your-project.supabase.co">
+            </div>
+            <div class="field">
+              <label for="supabaseKey">Supabase anon key</label>
+              <input id="supabaseKey" placeholder="Paste anon public key">
+            </div>
+            <div class="field">
+              <label for="supabaseBucket">PDF storage bucket</label>
+              <input id="supabaseBucket" value="quotation-files">
+            </div>
+            <div class="actions">
+              <button class="btn btn-primary" type="submit">Save connection</button>
+              <button class="btn btn-dark" id="syncSupabase" type="button">Sync now</button>
+              <button class="btn btn-danger" id="clearSupabase" type="button">Disconnect</button>
+            </div>
+            <p class="message" id="supabaseMessage"></p>
+          </form>
+          <div class="panel">
+            <div class="section-title"><h2>Status</h2></div>
+            <p><strong id="supabaseStatus">Local browser storage</strong></p>
+            <p class="muted small">Use the SQL setup file supplied with this app to create the online tables and storage bucket first. After connection, uploaded PDFs are stored in Supabase Storage and quotation rows use those file links.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="users" class="section">
+        <div class="grid">
+          <form id="userForm" class="panel">
+            <div class="section-title"><h2>Create user</h2></div>
+            <div class="field">
+              <label for="newName">Full name</label>
+              <input id="newName" required placeholder="Team member name">
+            </div>
+            <div class="field">
+              <label for="newEmail">Email</label>
+              <input id="newEmail" type="email" required placeholder="name@evolvingtechkenya.com">
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="newRole">Rights</label>
+                <select id="newRole">
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="newPassword">Password</label>
+                <input id="newPassword" type="password" required placeholder="Set password">
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit" style="width:100%">Create user</button>
+            <p class="message" id="userMessage"></p>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Email</th><th>Rights</th><th>Last access</th><th>Action</th></tr></thead>
+              <tbody id="userRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="logs" class="section">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>User</th><th>Email</th><th>Action</th><th>Date and time</th></tr></thead>
+            <tbody id="logRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <section id="quoteModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h2 id="modalTitle" style="margin:0;font-size:1.2rem">Saved quotation</h2>
+          <p id="modalSubtitle" class="muted small" style="margin:4px 0 0"></p>
+        </div>
+        <button class="btn btn-soft" id="closeQuoteModal" type="button">Close</button>
+      </div>
+      <div class="modal-body">
+        <div id="quoteDetail"></div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const STORE = "evolvingPipelineState";
+    const SUPABASE_CONFIG = "evolvingPipelineSupabase";
+    const emailDomain = "@evolvingtechkenya.com";
+    const starter = {
+      users: [
+        { id: crypto.randomUUID(), name: "System Admin", email: "admin@evolvingtechkenya.com", password: "Admin@123", role: "admin", active: true, lastAccess: "" }
+      ],
+      quotes: [],
+      logs: []
+    };
+
+    let state = loadState();
+    let currentUser = null;
+    let supabaseClient = null;
+    let supabaseConfig = loadSupabaseConfig();
+    let onlineReady = false;
+
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+
+    function loadState() {
+      const saved = localStorage.getItem(STORE);
+      if (!saved) return structuredClone(starter);
+      try { return JSON.parse(saved); }
+      catch { return structuredClone(starter); }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORE, JSON.stringify(state));
+      if (onlineReady) cloudSaveState();
+    }
+
+    function loadSupabaseConfig() {
+      try {
+        return JSON.parse(localStorage.getItem(SUPABASE_CONFIG)) || { url: "", key: "", bucket: "quotation-files" };
+      } catch {
+        return { url: "", key: "", bucket: "quotation-files" };
+      }
+    }
+
+    function saveSupabaseConfig(config) {
+      supabaseConfig = config;
+      localStorage.setItem(SUPABASE_CONFIG, JSON.stringify(config));
+    }
+
+    function hasSupabaseConfig() {
+      return Boolean(supabaseConfig.url && supabaseConfig.key && window.supabase);
+    }
+
+    async function connectSupabase() {
+      if (!hasSupabaseConfig()) {
+        onlineReady = false;
+        updateSupabaseStatus();
+        return false;
+      }
+      supabaseClient = window.supabase.createClient(supabaseConfig.url, supabaseConfig.key);
+      onlineReady = true;
+      updateSupabaseStatus();
+      return true;
+    }
+
+    function updateSupabaseStatus() {
+      const status = document.getElementById("supabaseStatus");
+      if (!status) return;
+      status.textContent = onlineReady ? `Connected to Supabase (${supabaseConfig.bucket || "quotation-files"})` : "Local browser storage";
+      document.getElementById("supabaseUrl").value = supabaseConfig.url || "";
+      document.getElementById("supabaseKey").value = supabaseConfig.key || "";
+      document.getElementById("supabaseBucket").value = supabaseConfig.bucket || "quotation-files";
+    }
+
+    function mapCloudUser(row) {
+      return {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        password: row.password,
+        role: row.role,
+        active: row.active,
+        lastAccess: row.last_access || ""
+      };
+    }
+
+    function mapCloudQuote(row) {
+      return {
+        id: row.id,
+        number: row.number,
+        class: row.class,
+        title: row.title,
+        customer: row.customer,
+        amount: row.amount,
+        assignedTo: row.assigned_to,
+        status: row.status,
+        fileName: row.file_name,
+        fileUrl: row.file_url,
+        importedAt: row.imported_at || ""
+      };
+    }
+
+    function mapCloudLog(row) {
+      return {
+        id: row.id,
+        user: row.user_name,
+        email: row.email,
+        action: row.action,
+        stamp: row.stamp || ""
+      };
+    }
+
+    async function loadCloudState() {
+      if (!onlineReady) return;
+      const [usersRes, quotesRes, logsRes] = await Promise.all([
+        supabaseClient.from("ep_users").select("*").order("name"),
+        supabaseClient.from("ep_quotations").select("*").order("created_at", { ascending: false }),
+        supabaseClient.from("ep_access_logs").select("*").order("created_at", { ascending: false }).limit(300)
+      ]);
+      if (usersRes.error || quotesRes.error || logsRes.error) {
+        throw new Error(usersRes.error?.message || quotesRes.error?.message || logsRes.error?.message);
+      }
+      state.users = usersRes.data.map(mapCloudUser);
+      state.quotes = quotesRes.data.map(mapCloudQuote);
+      state.logs = logsRes.data.map(mapCloudLog);
+      localStorage.setItem(STORE, JSON.stringify(state));
+    }
+
+    async function cloudSaveState() {
+      if (!onlineReady) return;
+      const users = state.users.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        password: u.password,
+        role: u.role,
+        active: u.active,
+        last_access: u.lastAccess || null
+      }));
+      const quotes = state.quotes.map(q => ({
+        id: q.id,
+        number: q.number,
+        class: q.class || quotationClass(q.number),
+        title: q.title,
+        customer: q.customer,
+        amount: q.amount,
+        assigned_to: q.assignedTo,
+        status: q.status,
+        file_name: q.fileName || "",
+        file_url: q.fileUrl || q.fileData || "",
+        imported_at: q.importedAt || null
+      }));
+      const logs = state.logs.slice(0, 300).map(l => ({
+        id: l.id,
+        user_name: l.user,
+        email: l.email,
+        action: l.action,
+        stamp: l.stamp || null
+      }));
+      await supabaseClient.from("ep_users").upsert(users);
+      await supabaseClient.from("ep_quotations").upsert(quotes);
+      if (logs.length) await supabaseClient.from("ep_access_logs").upsert(logs);
+    }
+
+    function logAccess(user, action) {
+      const stamp = new Date().toLocaleString();
+      state.logs.unshift({ id: crypto.randomUUID(), user: user.name, email: user.email, action, stamp });
+      user.lastAccess = stamp;
+      saveState();
+    }
+
+    function quotationClass(number, fallback = "ET") {
+      const match = String(number || "").toUpperCase().match(/\b(ETC|ETS|ET)\b/);
+      return match ? match[1] : fallback;
+    }
+
+    function quotationSequence(number) {
+      const text = String(number || "").toUpperCase();
+      const classMatch = text.match(/\b(?:ETC|ETS|ET)\b\s*[-\/]?\s*(\d+)/);
+      if (classMatch) return Number(classMatch[1]) || 0;
+      const numbers = text.match(/(\d+)/g);
+      return numbers ? Number(numbers[0]) || 0 : 0;
+    }
+
+    function normalizeQuotationNumber(number) {
+      const text = String(number || "").toUpperCase().replace(/\s+/g, "");
+      const match = text.match(/\b(ETC|ETS|ET)[\-\/]?(\d+)(?:[\-\/]?(\d{2,4}))?/);
+      if (!match) return String(number || "").trim();
+      const year = match[3] || new Date().getFullYear();
+      return `${match[1]}/${Number(match[2])}/${year}`;
+    }
+
+    function nextQuotationNumber(prefix = "ET") {
+      const target = quotationClass(prefix);
+      const numbers = state.quotes
+        .filter(q => quotationClass(q.class || q.number) === target)
+        .map(q => quotationSequence(q.number));
+      const next = Math.max(0, ...numbers) + 1;
+      return `${target}/${next}/${new Date().getFullYear()}`;
+    }
+
+    function money(value) {
+      const amount = parseAmount(value);
+      if (!amount) return value || "0";
+      return amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+
+    function parseAmount(value) {
+      const cleaned = String(value || "")
+        .replace(/,/g, "")
+        .replace(/[^\d.]/g, "");
+      const parts = cleaned.split(".");
+      const normalized = parts.length > 2 ? `${parts.shift()}.${parts.join("")}` : cleaned;
+      return Number(normalized) || 0;
+    }
+
+    function escapeHtml(value) {
+      return String(value || "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[ch]));
+    }
+
+    function isAdmin() {
+      return currentUser && currentUser.role === "admin";
+    }
+
+    async function prepareOnlineState() {
+      await connectSupabase();
+      if (!onlineReady) return;
+      await loadCloudState();
+      if (!state.users.length) {
+        state.users = structuredClone(starter.users);
+        await cloudSaveState();
+        await loadCloudState();
+      }
+    }
+
+    function setMessage(id, text, ok = false) {
+      const el = document.getElementById(id);
+      el.textContent = text || "";
+      el.style.color = ok ? "var(--green)" : "var(--red)";
+    }
+
+    function extractField(text, fileName = "") {
+      const clean = text.replace(/\r/g, "").replace(/[ \t]+/g, " ");
+      const lines = clean.split("\n").map(line => line.trim()).filter(Boolean);
+      const joined = lines.join("\n");
+      const quotePatterns = [
+        /quotation\s*(?:number|no\.?|#)\s*[:\-]?\s*((?:ETC|ETS|ET)\s*[-\/]?\s*\d+\s*(?:[\/\-_]\s*\d{2,4})?)/i,
+        /quotation\s*(?:number|no\.?|#)?[\s\S]{0,90}?\b((?:ETC|ETS|ET)\s*[-\/]\s*\d+\s*(?:[\/\-_]\s*\d{2,4})?)/i,
+        /quote\s*(?:number|no\.?|#)\s*[:\-]?\s*((?:ETC|ETS|ET)\s*[-\/]?\s*\d+\s*(?:[\/\-_]\s*\d{2,4})?)/i,
+        /\b((?:ETC|ETS|ET)\s*[-\/]\s*\d+\s*(?:[\/\-_]\s*\d{2,4})?)\b/i,
+        /\b(ETK[-\/]?\d{2,}[-\/]?\d*)\b/i,
+        /\b(QT[-\/]?\d{2,}[-\/]?\d*)\b/i
+      ];
+      const rePatterns = [
+        /\bRE\s*[:\-]\s*(.+)/i,
+        /\bSUBJECT\s*[:\-]\s*(.+)/i,
+        /\bTITLE\s*[:\-]\s*(.+)/i
+      ];
+      const amountPatterns = [
+        /(?:grand\s*total|total\s*amount|total\s*incl\.?\s*vat|total\s*including\s*vat|amount\s*due|balance\s*due|net\s*total)\s*[:\-]?\s*((?:KES|KSH|USD|EUR|GBP)?\s*[\d,]+(?:\.\d{1,2})?)/i,
+        /\btotal\s*[:\-]?\s*((?:KES|KSH|USD|EUR|GBP)?\s*[\d,]+(?:\.\d{1,2})?)/i,
+        /\b(?:KES|KSH|USD|EUR|GBP)\s*[\d,]+(?:\.\d{1,2})?\b/i
+      ];
+
+      const findBy = patterns => {
+        for (const pattern of patterns) {
+          const match = joined.match(pattern);
+          if (match) return (match[1] || match[0]).trim();
+        }
+        return "";
+      };
+
+      const findAmount = () => {
+        const amountToken = /(?:KES|KSH|USD|EUR|GBP)?\s*[\d]{1,3}(?:[, ]\d{3})+(?:\.\d{1,2})?|(?:KES|KSH|USD|EUR|GBP)\s*[\d,]+(?:\.\d{1,2})?|\b\d+(?:\.\d{2})\b/i;
+        const amountOnly = /^(?:KES|KSH|USD|EUR|GBP)?\s*\d{1,3}(?:[, ]\d{3})+(?:\.\d{1,2})?$/i;
+        const totalWords = /(?:grand\s*total|total\s*amount|total\s*incl|total\s*including|amount\s*due|balance\s*due|net\s*total|\btotal\b)/i;
+        const avoidWords = /(sub\s*total|subtotal|discount|unit\s*price|qty|quantity|rate)/i;
+        const candidates = [];
+        const standaloneRuns = [];
+        let currentRun = [];
+
+        lines.forEach(line => {
+          if (amountOnly.test(line)) {
+            currentRun.push(line);
+          } else if (currentRun.length) {
+            standaloneRuns.push(currentRun);
+            currentRun = [];
+          }
+        });
+        if (currentRun.length) standaloneRuns.push(currentRun);
+
+        const hasSeparatedTotalLabels = /subtotal/i.test(joined) && /vat/i.test(joined) && /\btotal\b/i.test(joined);
+        const finalTotalsRun = standaloneRuns.filter(run => run.length >= 2).at(-1);
+        if (hasSeparatedTotalLabels && finalTotalsRun) {
+          return finalTotalsRun.at(-1).trim();
+        }
+
+        lines.forEach((line, index) => {
+          const sameLine = line.match(new RegExp(`${totalWords.source}[^\\dA-Z]*(?:KES|KSH|USD|EUR|GBP)?\\s*([\\d, ]+(?:\\.\\d{1,2})?)`, "i"));
+          if (sameLine && !avoidWords.test(line.replace(totalWords, ""))) {
+            candidates.push({ value: sameLine[1], label: line, score: 100 + index });
+          }
+
+          if (totalWords.test(line) && !avoidWords.test(line)) {
+            for (let offset = 1; offset <= 4; offset++) {
+              const nearby = lines[index + offset] || "";
+              const found = nearby.match(amountToken);
+              if (found) {
+                candidates.push({ value: found[0], label: line, score: 90 + index - offset });
+                break;
+              }
+            }
+          }
+
+          const keywordAndAmount = line.match(amountToken);
+          if (keywordAndAmount && /(?:KES|KSH|USD|EUR|GBP)/i.test(keywordAndAmount[0])) {
+            candidates.push({ value: keywordAndAmount[0], label: line, score: 20 + index });
+          }
+        });
+
+        if (!candidates.length) return findBy(amountPatterns);
+        candidates.sort((a, b) => {
+          const grandA = /grand|amount due|balance due|total amount|total incl|total including/i.test(a.label) ? 50 : 0;
+          const grandB = /grand|amount due|balance due|total amount|total incl|total including/i.test(b.label) ? 50 : 0;
+          return (b.score + grandB + parseAmount(b.value) / 100000000) - (a.score + grandA + parseAmount(a.value) / 100000000);
+        });
+        return candidates[0].value.trim();
+      };
+
+      const customerIndex = lines.findIndex(line => /^(customer|client|bill to|to)\b/i.test(line));
+      const customer = customerIndex >= 0
+        ? lines.slice(customerIndex, customerIndex + 5).join("\n")
+        : lines.slice(0, 8).filter(line => /ltd|limited|company|kenya|p\.?o|email|tel|phone|customer|client/i.test(line)).slice(0, 5).join("\n");
+
+      const detectedNumber = normalizeQuotationNumber(findBy(quotePatterns) || findBy.call(null, [/\b((?:ETC|ETS|ET)\s*[-\/]?\s*\d+\s*(?:[\/\-_]\s*\d{2,4})?)\b/i]) || String(fileName).match(/\b(ETC|ETS|ET)[\-\/\s]*(\d+)(?:[\-\/\s]*(\d{2,4}))?/i)?.[0] || "");
+
+      return {
+        number: detectedNumber,
+        class: quotationClass(detectedNumber),
+        title: findBy(rePatterns),
+        amount: findAmount(),
+        customer
+      };
+    }
+
+    async function extractPdfText(file) {
+      if (!window.pdfjsLib) throw new Error("PDF reader did not load. Check internet access, or enter the fields manually.");
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      const pages = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        pages.push(content.items.map(item => item.str).join("\n"));
+      }
+      return pages.join("\n");
+    }
+
+    function currentAssignmentName() {
+      const assignedEmail = document.getElementById("assignedTo").value;
+      const assignedUser = state.users.find(u => u.email === assignedEmail);
+      return assignedUser ? assignedUser.name : assignedEmail;
+    }
+
+    function quoteExists(number) {
+      return state.quotes.some(q => q.number.toLowerCase() === String(number || "").toLowerCase());
+    }
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        if (!file) return resolve("");
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadPdfToSupabase(file, number) {
+      if (!file || !onlineReady) return "";
+      const safeNumber = String(number || crypto.randomUUID()).replace(/[^a-z0-9-_]/gi, "_");
+      const path = `${safeNumber}/${Date.now()}-${file.name.replace(/[^a-z0-9._-]/gi, "_")}`;
+      const upload = await supabaseClient.storage
+        .from(supabaseConfig.bucket || "quotation-files")
+        .upload(path, file, { upsert: true, contentType: "application/pdf" });
+      if (upload.error) throw new Error(upload.error.message);
+      const publicUrl = supabaseClient.storage
+        .from(supabaseConfig.bucket || "quotation-files")
+        .getPublicUrl(path);
+      return publicUrl.data.publicUrl;
+    }
+
+    async function buildQuoteRecord(data, file, options = {}) {
+      const selectedClass = data.class || document.getElementById("quotationClass").value || "ET";
+      const number = normalizeQuotationNumber(data.number) || nextQuotationNumber(selectedClass);
+      return {
+        id: crypto.randomUUID(),
+        number,
+        class: quotationClass(number, selectedClass),
+        title: data.title || options.title || "Not detected",
+        customer: data.customer || options.customer || "Not detected",
+        amount: data.amount || options.amount || "0",
+        assignedTo: options.assignedTo || currentAssignmentName(),
+        status: options.status || document.getElementById("quoteStatus").value,
+        fileName: file ? file.name : "",
+        fileUrl: options.fileUrl || await uploadPdfToSupabase(file, number),
+        fileData: onlineReady ? "" : options.fileData || await fileToDataUrl(file),
+        importedAt: new Date().toLocaleString()
+      };
+    }
+
+    async function detectPdfFile(file) {
+      const text = await extractPdfText(file);
+      return extractField(text, file.name);
+    }
+
+    async function autoSaveSelectedPdfs() {
+      const files = [...document.getElementById("quoteFile").files].filter(file => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+      if (!files.length) {
+        setMessage("quoteMessage", "Select one or more PDF quotations first.");
+        return;
+      }
+
+      setMessage("quoteMessage", `Scanning ${files.length} PDF file(s)...`, true);
+      let saved = 0;
+      let skipped = 0;
+      const failed = [];
+
+      for (const file of files) {
+        try {
+          const data = await detectPdfFile(file);
+          const record = await buildQuoteRecord(data, file);
+          if (quoteExists(record.number)) {
+            skipped++;
+            continue;
+          }
+          state.quotes.unshift(record);
+          saved++;
+        } catch (error) {
+          failed.push(file.name);
+        }
+      }
+
+      if (saved) logAccess(currentUser, `Auto saved ${saved} quotation PDF(s)`);
+      saveState();
+      render();
+      const parts = [`Saved ${saved}`, `skipped ${skipped} duplicate(s)`];
+      if (failed.length) parts.push(`failed ${failed.length}`);
+      setMessage("quoteMessage", parts.join(", ") + ".", saved > 0);
+    }
+
+    function csvCell(value) {
+      return `"${String(value || "").replace(/"/g, '""')}"`;
+    }
+
+    function exportSpreadsheetCsv() {
+      const headers = ["Class", "Quotation No.", "Imported", "File", "Customer", "RE / Title", "Amount", "Assigned", "Status"];
+      const rows = state.quotes.map(q => [
+        q.class || quotationClass(q.number),
+        q.number,
+        q.importedAt,
+        q.fileName,
+        q.customer,
+        q.title,
+        q.amount,
+        q.assignedTo,
+        q.status
+      ]);
+      const csv = [headers, ...rows].map(row => row.map(csvCell).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `evolving-pipeline-quotations-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function showSavedQuotation(id) {
+      const quote = state.quotes.find(q => q.id === id);
+      if (!quote) return;
+      document.getElementById("modalTitle").textContent = quote.number || "Saved quotation";
+      document.getElementById("modalSubtitle").textContent = `${quote.class || quotationClass(quote.number)} quotation saved ${quote.importedAt || ""}`;
+      const pdfSource = quote.fileUrl || quote.fileData || "";
+      const pdfView = pdfSource
+        ? `<iframe class="pdf-frame" title="Saved PDF quotation" src="${escapeHtml(pdfSource)}"></iframe>`
+        : `<div class="detail-box"><span>Original PDF</span><strong>Not available for this older saved row</strong><p class="muted small">Upload and save the PDF again to store the original quotation for viewing.</p></div>`;
+      document.getElementById("quoteDetail").innerHTML = `
+        <div class="detail-grid">
+          <div class="detail-box"><span>Quotation number</span><strong>${escapeHtml(quote.number)}</strong></div>
+          <div class="detail-box"><span>Class</span><strong>${escapeHtml(quote.class || quotationClass(quote.number))}</strong></div>
+          <div class="detail-box"><span>Amount</span><strong>${escapeHtml(quote.amount)}</strong></div>
+          <div class="detail-box"><span>Status</span><strong>${escapeHtml(quote.status)}</strong></div>
+          <div class="detail-box"><span>Assigned to</span><strong>${escapeHtml(quote.assignedTo)}</strong></div>
+          <div class="detail-box"><span>File</span><strong>${escapeHtml(quote.fileName || "No file name")}</strong></div>
+          <div class="detail-box"><span>Storage link</span>${pdfSource ? `<a href="${escapeHtml(pdfSource)}" target="_blank" rel="noopener">Open PDF in Supabase</a>` : "No online file link"}</div>
+          <div class="detail-box"><span>Customer</span>${escapeHtml(quote.customer).replace(/\n/g, "<br>")}</div>
+          <div class="detail-box"><span>RE / Title</span>${escapeHtml(quote.title)}</div>
+        </div>
+        ${pdfView}
+      `;
+      document.getElementById("quoteModal").classList.remove("hidden");
+      document.getElementById("quoteModal").setAttribute("aria-hidden", "false");
+    }
+
+    function closeSavedQuotation() {
+      document.getElementById("quoteModal").classList.add("hidden");
+      document.getElementById("quoteModal").setAttribute("aria-hidden", "true");
+      document.getElementById("quoteDetail").innerHTML = "";
+    }
+
+    function render() {
+      document.getElementById("nextQuoteET").textContent = nextQuotationNumber("ET");
+      document.getElementById("nextQuoteETS").textContent = nextQuotationNumber("ETS");
+      document.getElementById("nextQuoteETC").textContent = nextQuotationNumber("ETC");
+      document.getElementById("totalQuotes").textContent = state.quotes.length;
+      document.getElementById("totalValue").textContent = money(state.quotes.reduce((sum, q) => sum + parseAmount(q.amount), 0));
+      document.getElementById("activeUsers").textContent = state.users.filter(u => u.active).length;
+      const selectedClass = document.getElementById("quotationClass").value || "ET";
+      document.getElementById("quotationNumber").placeholder = nextQuotationNumber(selectedClass);
+      document.getElementById("nextClassNumber").value = nextQuotationNumber(selectedClass);
+      document.getElementById("currentName").textContent = currentUser ? currentUser.name : "User";
+      document.getElementById("currentRole").textContent = currentUser ? currentUser.role.toUpperCase() : "";
+      document.getElementById("usersNav").classList.toggle("hidden", !isAdmin());
+      document.getElementById("logsNav").classList.toggle("hidden", !isAdmin());
+      document.getElementById("supabaseNav").classList.toggle("hidden", !isAdmin());
+      document.getElementById("resetDemo").classList.toggle("hidden", !isAdmin());
+      updateSupabaseStatus();
+
+      const activeUsers = state.users.filter(u => u.active);
+      document.getElementById("assignedTo").innerHTML = activeUsers.map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.name)} - ${escapeHtml(u.email)}</option>`).join("");
+
+      const quoteRows = state.quotes.map(q => `
+        <tr>
+          <td><strong>${escapeHtml(q.number)}</strong></td>
+          <td><span class="status open">${escapeHtml(q.class || quotationClass(q.number))}</span></td>
+          <td>${escapeHtml(q.title)}</td>
+          <td class="small">${escapeHtml(q.customer).replace(/\n/g, "<br>")}</td>
+          <td>${escapeHtml(q.amount)}</td>
+          <td>${escapeHtml(q.assignedTo)}</td>
+          <td><span class="status ${escapeHtml(q.status.toLowerCase())}">${escapeHtml(q.status)}</span></td>
+        </tr>`).join("");
+      document.getElementById("recentQuotes").innerHTML = quoteRows || `<tr><td colspan="7" class="muted">No quotations uploaded yet.</td></tr>`;
+
+      document.getElementById("allQuotes").innerHTML = state.quotes.map(q => `
+        <tr>
+          <td><strong>${escapeHtml(q.number)}</strong><br><span class="muted small">${escapeHtml(q.fileName || "")}</span></td>
+          <td><span class="status open">${escapeHtml(q.class || quotationClass(q.number))}</span></td>
+          <td>${escapeHtml(q.title)}</td>
+          <td class="small">${escapeHtml(q.customer).replace(/\n/g, "<br>")}</td>
+          <td>${escapeHtml(q.amount)}</td>
+          <td>${escapeHtml(q.assignedTo)}</td>
+          <td>${escapeHtml(q.importedAt)}</td>
+          <td><div class="actions"><button class="btn btn-soft" data-view-quote="${q.id}" type="button">View</button>${isAdmin() ? `<button class="btn btn-danger" data-delete-quote="${q.id}" type="button">Delete</button>` : ""}</div></td>
+        </tr>`).join("") || `<tr><td colspan="8" class="muted">No quotations uploaded yet.</td></tr>`;
+
+      document.getElementById("spreadsheetRows").innerHTML = state.quotes.map((q, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>${escapeHtml(q.class || quotationClass(q.number))}</td>
+          <td><strong>${escapeHtml(q.number)}</strong></td>
+          <td>${escapeHtml(q.importedAt)}</td>
+          <td>${escapeHtml(q.fileName || "")}</td>
+          <td>${escapeHtml(q.customer).replace(/\n/g, "<br>")}</td>
+          <td>${escapeHtml(q.title)}</td>
+          <td>${escapeHtml(q.amount)}</td>
+          <td>${escapeHtml(q.assignedTo)}</td>
+          <td><span class="status ${escapeHtml(String(q.status || "open").toLowerCase())}">${escapeHtml(q.status)}</span><br><button class="btn btn-soft" data-view-quote="${q.id}" type="button" style="margin-top:8px">View</button></td>
+        </tr>`).join("") || `<tr><td colspan="10" class="muted">No quotations saved in the spreadsheet yet.</td></tr>`;
+
+      document.getElementById("userRows").innerHTML = state.users.filter(u => u.active).map(u => `
+        <tr>
+          <td>${escapeHtml(u.name)}</td>
+          <td>${escapeHtml(u.email)}</td>
+          <td><span class="status open">${escapeHtml(u.role)}</span></td>
+          <td>${escapeHtml(u.lastAccess || "No access yet")}</td>
+          <td>${u.email === currentUser?.email ? `<span class="muted">Signed in</span>` : `<button class="btn btn-danger" data-delete-user="${u.id}" type="button">Delete</button>`}</td>
+        </tr>`).join("");
+
+      document.getElementById("logRows").innerHTML = state.logs.map(log => `
+        <tr><td>${escapeHtml(log.user)}</td><td>${escapeHtml(log.email)}</td><td>${escapeHtml(log.action)}</td><td>${escapeHtml(log.stamp)}</td></tr>
+      `).join("") || `<tr><td colspan="4" class="muted">No access logs yet.</td></tr>`;
+    }
+
+    document.getElementById("loginForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const email = document.getElementById("loginEmail").value.trim().toLowerCase();
+      const password = document.getElementById("loginPassword").value;
+      if (!email.endsWith(emailDomain)) return setMessage("loginMessage", "Use an @evolvingtechkenya.com email address.");
+      setMessage("loginMessage", "Checking access...", true);
+      try {
+        await prepareOnlineState();
+      } catch (error) {
+        return setMessage("loginMessage", `Supabase connection failed: ${error.message}`);
+      }
+      const user = state.users.find(u => u.active && u.email.toLowerCase() === email && u.password === password);
+      if (!user) return setMessage("loginMessage", "Email or password is incorrect.");
+      currentUser = user;
+      logAccess(user, "Signed in");
+      document.getElementById("loginScreen").classList.add("hidden");
+      document.getElementById("appScreen").classList.remove("hidden");
+      updateSupabaseStatus();
+      render();
+    });
+
+    document.getElementById("logoutButton").addEventListener("click", () => {
+      if (currentUser) logAccess(currentUser, "Signed out");
+      currentUser = null;
+      document.getElementById("appScreen").classList.add("hidden");
+      document.getElementById("loginScreen").classList.remove("hidden");
+      document.getElementById("loginPassword").value = "";
+    });
+
+    document.querySelectorAll(".nav button").forEach(button => {
+      button.addEventListener("click", () => {
+        const tab = button.dataset.tab;
+        if ((tab === "users" || tab === "logs") && !isAdmin()) return;
+        document.querySelectorAll(".nav button").forEach(b => b.classList.remove("active"));
+        button.classList.add("active");
+        document.querySelectorAll(".section").forEach(section => section.classList.remove("active"));
+        document.getElementById(tab).classList.add("active");
+        document.getElementById("pageTitle").textContent = button.textContent;
+      });
+    });
+
+    document.getElementById("quoteFile").addEventListener("change", async event => {
+      const files = [...event.target.files];
+      const file = files[0];
+      if (!file) return;
+      setMessage("quoteMessage", files.length > 1 ? `Ready to auto save ${files.length} PDFs, previewing the first file.` : "Reading PDF...");
+      try {
+        const data = await detectPdfFile(file);
+        document.getElementById("quotationClass").value = data.class || quotationClass(data.number);
+        document.getElementById("quotationNumber").value = data.number || nextQuotationNumber(document.getElementById("quotationClass").value);
+        document.getElementById("reTitle").value = data.title || "";
+        document.getElementById("amount").value = data.amount || "";
+        document.getElementById("customerDetails").value = data.customer || "";
+        render();
+        setMessage("quoteMessage", files.length > 1 ? `First PDF previewed. Use Auto save selected PDFs to capture all ${files.length}.` : "PDF details imported. Review and save.", true);
+      } catch (error) {
+        document.getElementById("quotationNumber").value = nextQuotationNumber(document.getElementById("quotationClass").value);
+        setMessage("quoteMessage", error.message);
+      }
+    });
+
+    document.getElementById("autoSavePdfs").addEventListener("click", autoSaveSelectedPdfs);
+
+    document.getElementById("quotationClass").addEventListener("change", () => {
+      const prefix = document.getElementById("quotationClass").value;
+      const numberField = document.getElementById("quotationNumber");
+      if (!numberField.value.trim()) numberField.value = nextQuotationNumber(prefix);
+      document.getElementById("nextClassNumber").value = nextQuotationNumber(prefix);
+      numberField.placeholder = nextQuotationNumber(prefix);
+    });
+
+    document.getElementById("saveQuote").addEventListener("click", async () => {
+      const selectedClass = document.getElementById("quotationClass").value;
+      const number = normalizeQuotationNumber(document.getElementById("quotationNumber").value.trim()) || nextQuotationNumber(selectedClass);
+      const title = document.getElementById("reTitle").value.trim();
+      const customer = document.getElementById("customerDetails").value.trim();
+      const amount = document.getElementById("amount").value.trim();
+      const file = document.getElementById("quoteFile").files[0];
+      if (!title || !customer || !amount) return setMessage("quoteMessage", "Please confirm title, customer details, and amount before saving.");
+      if (quoteExists(number)) return setMessage("quoteMessage", "That quotation number already exists.");
+      const record = await buildQuoteRecord({
+        number,
+        class: quotationClass(number, selectedClass),
+        title,
+        customer,
+        amount
+      }, file);
+      state.quotes.unshift(record);
+      logAccess(currentUser, `Saved quotation ${number}`);
+      ["quoteFile", "quotationNumber", "reTitle", "customerDetails", "amount"].forEach(id => document.getElementById(id).value = "");
+      setMessage("quoteMessage", "Quotation saved.", true);
+      saveState();
+      render();
+    });
+
+    document.getElementById("exportCsv").addEventListener("click", exportSpreadsheetCsv);
+    document.getElementById("closeQuoteModal").addEventListener("click", closeSavedQuotation);
+    document.getElementById("quoteModal").addEventListener("click", event => {
+      if (event.target.id === "quoteModal") closeSavedQuotation();
+    });
+
+    document.getElementById("supabaseForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      if (!isAdmin()) return;
+      saveSupabaseConfig({
+        url: document.getElementById("supabaseUrl").value.trim(),
+        key: document.getElementById("supabaseKey").value.trim(),
+        bucket: document.getElementById("supabaseBucket").value.trim() || "quotation-files"
+      });
+      try {
+        await connectSupabase();
+        await cloudSaveState();
+        await loadCloudState();
+        setMessage("supabaseMessage", "Connected and synced online.", true);
+        render();
+      } catch (error) {
+        onlineReady = false;
+        updateSupabaseStatus();
+        setMessage("supabaseMessage", error.message);
+      }
+    });
+
+    document.getElementById("syncSupabase").addEventListener("click", async () => {
+      if (!isAdmin()) return;
+      try {
+        await connectSupabase();
+        await cloudSaveState();
+        await loadCloudState();
+        setMessage("supabaseMessage", "Synced with Supabase.", true);
+        render();
+      } catch (error) {
+        setMessage("supabaseMessage", error.message);
+      }
+    });
+
+    document.getElementById("clearSupabase").addEventListener("click", () => {
+      if (!isAdmin()) return;
+      localStorage.removeItem(SUPABASE_CONFIG);
+      supabaseConfig = loadSupabaseConfig();
+      supabaseClient = null;
+      onlineReady = false;
+      updateSupabaseStatus();
+      setMessage("supabaseMessage", "Disconnected. The app is using local browser storage.", true);
+    });
+
+    document.getElementById("userForm").addEventListener("submit", event => {
+      event.preventDefault();
+      if (!isAdmin()) return;
+      const name = document.getElementById("newName").value.trim();
+      const email = document.getElementById("newEmail").value.trim().toLowerCase();
+      const password = document.getElementById("newPassword").value;
+      const role = document.getElementById("newRole").value;
+      if (!email.endsWith(emailDomain)) return setMessage("userMessage", "User email must end with @evolvingtechkenya.com.");
+      if (state.users.some(u => u.active && u.email.toLowerCase() === email)) return setMessage("userMessage", "That user already exists.");
+      state.users.push({ id: crypto.randomUUID(), name, email, password, role, active: true, lastAccess: "" });
+      logAccess(currentUser, `Created user ${email}`);
+      event.target.reset();
+      setMessage("userMessage", "User created.", true);
+      saveState();
+      render();
+    });
+
+    document.body.addEventListener("click", async event => {
+      const deleteUser = event.target.dataset.deleteUser;
+      const deleteQuote = event.target.dataset.deleteQuote;
+      const viewQuote = event.target.dataset.viewQuote;
+      if (viewQuote) {
+        showSavedQuotation(viewQuote);
+        return;
+      }
+      if (deleteUser && isAdmin()) {
+        const user = state.users.find(u => u.id === deleteUser);
+        if (user) {
+          user.active = false;
+          logAccess(currentUser, `Deleted user ${user.email}`);
+          render();
+        }
+      }
+      if (deleteQuote && isAdmin()) {
+        const quote = state.quotes.find(q => q.id === deleteQuote);
+        state.quotes = state.quotes.filter(q => q.id !== deleteQuote);
+        logAccess(currentUser, `Deleted quotation ${quote ? quote.number : ""}`);
+        if (onlineReady) await supabaseClient.from("ep_quotations").delete().eq("id", deleteQuote);
+        saveState();
+        render();
+      }
+    });
+
+    document.getElementById("resetDemo").addEventListener("click", () => {
+      if (!isAdmin()) return;
+      state = structuredClone(starter);
+      currentUser = state.users[0];
+      logAccess(currentUser, "Reset demo data");
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
