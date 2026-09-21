@@ -976,11 +976,26 @@
     async function prepareOnlineState() {
       await connectSupabase();
       if (!onlineReady) return;
-      await loadCloudState();
-      if (!state.users.length) {
-        state.users = structuredClone(starter.users);
-        await cloudSaveState();
+      try {
         await loadCloudState();
+        if (!state.users.length) {
+          state.users = structuredClone(starter.users);
+          await cloudSaveState();
+          await loadCloudState();
+        }
+      } catch (error) {
+        // Network error or Supabase project unreachable — fall back to local storage
+        // so login can still proceed with locally cached data.
+        onlineReady = false;
+        supabaseClient = null;
+        updateSupabaseStatus();
+        const reason = error && error.message ? error.message : String(error);
+        const isFetchError = /failed to fetch|networkerror|load failed/i.test(reason);
+        throw new Error(
+          isFetchError
+            ? "Could not reach Supabase. Check your internet connection or verify the project URL in the Supabase settings tab."
+            : reason
+        );
       }
     }
 
@@ -1340,10 +1355,12 @@
       const password = document.getElementById("loginPassword").value;
       if (!email.endsWith(emailDomain)) return setMessage("loginMessage", "Use an @evolvingtechkenya.com email address.");
       setMessage("loginMessage", "Checking access...", true);
+      let onlineWarning = "";
       try {
         await prepareOnlineState();
       } catch (error) {
-        return setMessage("loginMessage", `Supabase connection failed: ${error.message}`);
+        // Supabase is unreachable — continue with local data and show a soft warning after login.
+        onlineWarning = error.message;
       }
       const user = state.users.find(u => u.active && u.email.toLowerCase() === email && u.password === password);
       if (!user) return setMessage("loginMessage", "Email or password is incorrect.");
@@ -1353,6 +1370,14 @@
       document.getElementById("appScreen").classList.remove("hidden");
       updateSupabaseStatus();
       render();
+      if (onlineWarning) {
+        // Show the warning inside the app (Supabase section message) so it doesn't block login.
+        const supabaseMsg = document.getElementById("supabaseMessage");
+        if (supabaseMsg) {
+          supabaseMsg.textContent = `Offline mode — ${onlineWarning}`;
+          supabaseMsg.style.color = "var(--amber)";
+        }
+      }
     });
 
     document.getElementById("logoutButton").addEventListener("click", () => {
